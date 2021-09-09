@@ -1,11 +1,14 @@
 import { ObjectId } from "mongoose";
 
-export interface User {
-    _id: ObjectId;
+export interface UserInfo {
     name: string;
     email: string;
+    profile: string;
+};
+
+export interface User extends UserInfo {
     password: string;
-    profile?: string;
+    verified?: boolean;
 }
 
 export interface Message {

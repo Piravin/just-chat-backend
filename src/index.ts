@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import * as dotenv from "dotenv";
 import typeDefs from "./views/graphql/schema";
 import resolvers from "./views/graphql/resolvers";
+import authRouter from "./views/rest/auth";
 
 class EnvironmentBuilder {
 
@@ -43,10 +44,16 @@ class EnvironmentBuilder {
     async createGraphQLServer(typeDefs: any, resolvers: any) {
         const app = express();
         app.use(cors());
+        app.use('/auth', authRouter);
+
         const httpServer = http.createServer(app);
         const server = new ApolloServer({
             typeDefs,
             resolvers,
+            context: ({req}) => {
+                const token: string = req.headers.authorization || "no token";
+                return { token };
+            },
             plugins: [ApolloServerPluginDrainHttpServer({httpServer})]
         });
         await server.start();
@@ -63,6 +70,5 @@ class EnvironmentBuilder {
     /** Director for Environment Builder */
     const Environment = new EnvironmentBuilder();
     Environment.configureEnvironment();
-    Environment.connectDatabase();
-    Environment.createGraphQLServer(typeDefs, resolvers);
+    Environment.connectDatabase();Environment.createGraphQLServer(typeDefs, resolvers);
 })();

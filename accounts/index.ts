@@ -8,6 +8,7 @@ import * as dotenv from "dotenv";
 import typeDefs from "./views/graphql/schema";
 import resolvers from "./views/graphql/resolvers";
 import authRouter from "./views/rest/auth";
+import cookieParser from "cookie-parser";
 
 class EnvironmentBuilder {
 
@@ -42,20 +43,32 @@ class EnvironmentBuilder {
     }
     
     async createGraphQLServer(typeDefs: any, resolvers: any) {
+
+        // Create basic express server and add required middlewares
         const app = express();
         app.use(cors());
+        app.use(cookieParser());
+
+        // Regisre path '/auth' which is used to verify email ids
         app.use('/auth', authRouter);
 
+        // Attach express server to ApolloServer
         const httpServer = http.createServer(app);
         const server = new ApolloServer({
             typeDefs,
             resolvers,
-            context: ({req}) => {
-                const token: string = req.headers.authorization || "no token";
-                return { token };
+            context: ({req, res}) => {
+                /**
+                 * Facilitates use of JWT token
+                 * and response object to attach cookies
+                 */
+                const token: string = req.cookies.jwt || "";
+                return { token: token, res: res };
             },
             plugins: [ApolloServerPluginDrainHttpServer({httpServer})]
         });
+
+        // Start ApolloServer
         await server.start();
         server.applyMiddleware({app, path: '/'});
         await new Promise<void>((resolve, _) => httpServer.listen({port: this.PORT}, () => {
@@ -70,5 +83,6 @@ class EnvironmentBuilder {
     /** Director for Environment Builder */
     const Environment = new EnvironmentBuilder();
     Environment.configureEnvironment();
-    Environment.connectDatabase();Environment.createGraphQLServer(typeDefs, resolvers);
+    Environment.connectDatabase();
+    Environment.createGraphQLServer(typeDefs, resolvers);
 })();

@@ -6,8 +6,14 @@ import { MailInfo } from "./types";
 import ejs from "ejs";
 import path from "path";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 class Emailer {
+
+    /**
+     * This class handles the emails to be set for user verification
+     */
+
     private transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
 
     constructor() {
@@ -44,6 +50,8 @@ class Emailer {
 }
 
 export async function SignUp(input: User): Promise<void> {
+
+    // Check whether email id is already taken
     const userExists = await UserModel.findOne({email: input.email})
                         .then(res => {return res;}).catch(console.error);
     
@@ -51,13 +59,18 @@ export async function SignUp(input: User): Promise<void> {
         throw new Error("User Allready exists");
     }
 
+    // Start creating the new user
     const user = new UserModel({...input, verified: false});
     
     /** Generating verification code */
     let hash = await bcrypt.hash(user.id, Number(process.env.BCRYPT_SALT));
 
+    /**
+     * Send verification email using the email builder
+    */
     const mailDirector = new Emailer();
 
+    // Write email using ejs template
     const htmlContent = await mailDirector.readFromTemplate("email.ejs", {
         link: `${process.env.SERVER_NAME}/auth/verify?id=${user.id}&code=${hash}`
     }).then(data=>{
@@ -71,13 +84,23 @@ export async function SignUp(input: User): Promise<void> {
         text: "",
         html: htmlContent || ""
     });
+    // Finidhed handling email verification
     
+    /**
+     * Save the user info into the database with 
+     * verified = false
+     */
     await user.save();
 
 }
 
+
 export async function verifyUser(id:string, code: string) {
-    // const hash = await bcrypt.hash(id, Number(process.env.BCRYPT_SALT));
+    
+    /**
+     * Handle user verification after the user clicks the 
+     * link sent through email
+     */
 
     const match = await bcrypt.compare(id, code);
     if (match) {
@@ -91,7 +114,13 @@ export async function verifyUser(id:string, code: string) {
     } else return false;
 }
 
-export async function loginUser(email: string, password: string) {
+
+export async function loginUser(email: string, password: string, res: any) {
+
+    /**
+     * Handle user authentication
+     * and set JWT for further authorization
+     */
 
     const [user, error] = await UserModel.findOne({email: email})
                                 .then(data=>{
@@ -100,20 +129,65 @@ export async function loginUser(email: string, password: string) {
                                     return [null, err];
                                 });
     
-    if (error === null) {
+    // Check whether user exists and is verified
+    if (error === null && user.verified) {
+
+        // Compare password hashes with the one stored in database
         const authenticated = await bcrypt.compare(password, user.password);
 
+        // Set the JWT token as a cookie if authenticated
         if (authenticated) {
+
+            const token = await jwt.sign(user.id, process.env.JWT_SECRET!);
+            res.cookie('jwt', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === "production",
+                maxAge: 60 * 60 * 24 * 7 // -> 7 days
+            })
+
             return {
                 code: 200,
-                success: true
+                success: true,
             };
         }
     }
-    
+
+    /* Return unauthorized if 
+        - user has not verified email
+        - email and password don't match
+        - user does not exist
+    */
     return {
         code: 401,
         success: false
     };
 
+}
+
+
+export async function verifyAuth(token: string) {
+
+    /**
+     * This function is used to verify JWT
+     * to perform authorization of user at various stages
+     */
+    try {
+
+        const result = await jwt.verify(token, process.env.JWT_SECRET!);
+        
+        console.log(`User ${result} is logged in`);
+        
+        return {
+            code: 200,
+            success: true
+        }
+
+    } catch (err) {
+
+        return {
+            code: 401,
+            success: false
+        }
+
+    }
 }

@@ -4,11 +4,18 @@ const typeDefs = gql`
     type Query {
         checkCon: String
         login(email: String, password: String): LoginUser
+        verifyAuth: Authorized
+    }
+
+    type Authorized {
+        code: Int!
+        success: Boolean!
     }
 
     type LoginUser {
         code: Int!
         success: Boolean!
+        token: String!
     }
 
     input UserFieldsInput {

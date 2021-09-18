@@ -1,5 +1,5 @@
-import { SignUp, loginUser } from "../../controllers/auth";
-import {User, UserInfo} from "../../models/types";
+import { SignUp, loginUser, verifyAuth } from "../../controllers/auth";
+import {User} from "../../models/types";
 
 interface UserInput {
     input: User;
@@ -13,19 +13,27 @@ interface Login {
 const resolvers = {
     Query: {
         checkCon: (_: any, __: any, {token} : any) => {
+            /** Query to check graphql connection */
             return "Hello from graphql" + "  " + token;
         },
 
-        login: async (_: any, {email, password}: Login, {token} : any) => {
-            const result = await loginUser(email, password);
+        login: async (_: any, {email, password}: Login, {res} : any) => {
+            /** Handle user login */
+            const result = await loginUser(email, password, res);
             return result;
+        },
+
+        verifyAuth: async (_: any, __:any, ctx: any) => {
+            /** Handle user authorization */
+            const token = ctx.token;
+            return await verifyAuth(token);
         }
     },
 
     Mutation: {
         signUpUser: async (_: any, {input}: UserInput) => {
 
-            /** Validatiog input */
+            /** Validating input */
             let valid = true;
 
             const validName = (() => input.name.length <= 15)();
@@ -54,6 +62,7 @@ const resolvers = {
             }).then((user) => ({user: user, error: null}))
             .catch((err) => ({user: null, error: err}));
 
+            // Send error message if inputs are not valid
             if (error != null || !valid) {
                 return {
                     code: valid ? 500 : 400,
@@ -65,6 +74,7 @@ const resolvers = {
                 };
             }
 
+            // Return success response if inputs are valid and user is created
             return {
                 code: 200,
                 success: true,
